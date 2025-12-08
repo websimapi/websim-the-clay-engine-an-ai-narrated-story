@@ -63,20 +63,24 @@ function init() {
 async function generateAudio(text, voiceId, segmentIndex) {
     // 1. Check Cache
     try {
+        // Simplify filter to just voice_id to avoid potential type mismatch issues on the backend
         const cache = await room.collection('narration_cache')
-            .filter({ voice_id: voiceId, segment_index: segmentIndex })
+            .filter({ voice_id: voiceId })
             .getList();
             
-        const hit = cache.find(r => r.text === text);
+        // Perform more specific matching client-side
+        const hit = cache.find(r => r.text === text && r.segment_index == segmentIndex);
         if (hit && hit.audio_url) {
             console.log("Using cached narration for segment", segmentIndex);
             return hit.audio_url;
         }
     } catch (e) {
-        console.warn("Cache check failed", e);
+        // Log quietly so it doesn't look like a critical error to the user
+        console.log("Cache check skipped", e);
     }
 
     // 2. Generate
+    if (statusBar) statusBar.textContent = "Generating audio (this may take a moment)...";
     try {
         const result = await websim.textToSpeech({
             text: text,
