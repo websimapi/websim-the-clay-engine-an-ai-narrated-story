@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Clay Engine - An AI Narrated Story</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "canvas-confetti": "https://esm.sh/canvas-confetti@1.6.0"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>The Clay Engine</h1>
+            <div class="controls">
+                <div class="voice-select-container">
+                    <label for="voice-select">Narrator:</label>
+                    <select id="voice-select"></select>
+                </div>
+                <button id="start-btn" class="primary-btn">Begin Narration</button>
+                <button id="stop-btn" class="secondary-btn" hidden>Stop</button>
+            </div>
+            <div id="status-bar">Ready to tell the story.</div>
+        </header>
+
+        <main id="story-container">
+            <!-- Story segments will be injected here -->
+        </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
