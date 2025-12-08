@@ -1,10 +1,13 @@
 import { storySegments, voices } from './data.js';
 
+const room = new WebsimSocket();
+
 const appState = {
     currentSegment: -1,
     isPlaying: false,
     audioQueue: [],
-    selectedVoice: voices.find(v => v.name === "Rachel")?.voice_id || voices[0].voice_id
+    selectedVoice: voices.find(v => v.name === "Rachel")?.voice_id || voices[0].voice_id,
+    currentAudio: null
 };
 
 // DOM Elements
@@ -57,13 +60,51 @@ function init() {
     stopBtn.addEventListener('click', stopStory);
 }
 
-async function generateAudio(text, voiceId) {
+async function generateAudio(text, voiceId, segmentIndex) {
+    // 1. Check Cache
+    try {
+        const cache = await room.collection('narration_cache')
+            .filter({ voice_id: voiceId, segment_index: segmentIndex })
+            .getList();
+            
+        const hit = cache.find(r => r.text === text);
+        if (hit && hit.audio_url) {
+            console.log("Using cached narration for segment", segmentIndex);
+            return hit.audio_url;
+        }
+    } catch (e) {
+        console.warn("Cache check failed", e);
+    }
+
+    // 2. Generate
     try {
         const result = await websim.textToSpeech({
             text: text,
             voice: voiceId
         });
-        return result.url;
+        
+        let finalUrl = result.url;
+
+        // 3. Persist (Upload) & Cache
+        try {
+            const response = await fetch(finalUrl);
+            if (response.ok) {
+                const blob = await response.blob();
+                const file = new File([blob], `narration_${voiceId}_${segmentIndex}.mp3`, { type: 'audio/mpeg' });
+                finalUrl = await websim.upload(file);
+                
+                await room.collection('narration_cache').create({
+                    voice_id: voiceId,
+                    segment_index: segmentIndex,
+                    text: text,
+                    audio_url: finalUrl
+                });
+            }
+        } catch (cacheErr) {
+            console.warn("Failed to cache audio, using temporary url", cacheErr);
+        }
+
+        return finalUrl;
     } catch (e) {
         console.error("Audio gen failed", e);
         statusBar.textContent = "Error generating audio...";
@@ -128,20 +169,44 @@ async function playSegment(index) {
     }
 
     // Audio Logic
-    statusBar.textContent = "Generating narration...";
-    const audioUrl = await generateAudio(currentData.text, appState.selectedVoice);
+    statusBar.textContent = "Loading narration...";
+    const audioUrl = await generateAudio(currentData.text, appState.selectedVoice, index);
 
-    if (!audioUrl || !appState.isPlaying) return;
+    if (!audioUrl) {
+        if (appState.isPlaying) {
+             console.warn("Audio failed, skipping segment...");
+             setTimeout(() => playSegment(index + 1), 2000);
+        }
+        return;
+    }
+
+    if (!appState.isPlaying) return;
 
     statusBar.textContent = "Narrating...";
+    
+    if (appState.currentAudio) {
+        appState.currentAudio.pause();
+        appState.currentAudio = null;
+    }
+
     const audio = new Audio(audioUrl);
+    appState.currentAudio = audio;
 
     audio.onended = () => {
+        appState.currentAudio = null;
         playSegment(index + 1);
     };
+    
+    // Add error handling for playback
+    audio.onerror = () => {
+        console.error("Playback error");
+        if(appState.isPlaying) playSegment(index + 1);
+    };
 
-    audio.play();
-    appState.currentAudio = audio; // Store reference to stop it later
+    audio.play().catch(e => {
+        console.error("Autoplay prevented or failed", e);
+        if(appState.isPlaying) playSegment(index + 1);
+    });
 }
 
 function startStory() {
@@ -150,8 +215,10 @@ function startStory() {
     stopBtn.hidden = false;
     voiceSelect.disabled = true;
 
-    // Start from beginning or resume? Let's start from 0 for simplicity or where we left off
-    const startIndex = appState.currentSegment > -1 ? appState.currentSegment : 0;
+    // Restart if we were at the end
+    let startIndex = appState.currentSegment > -1 ? appState.currentSegment : 0;
+    if (startIndex >= storySegments.length - 1) startIndex = 0;
+
     playSegment(startIndex);
 }
 
